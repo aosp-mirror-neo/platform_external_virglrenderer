@@ -2216,9 +2216,6 @@ spec@!opengl 1.0@gl-1.0-logicop@GL_NOOP,Fail
 spec@!opengl 1.0@gl-1.0-logicop@GL_NOOP_MSAA,Fail
 spec@!opengl 1.0@gl-1.0-spot-light,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,ExpectedFail
-spec@!opengl 1.0@rasterpos,Fail
-spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
-spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@!opengl 1.1@clipflat,Fail
 spec@!opengl 1.1@clipflat@glBegin/End(GL_POLYGON)- glFrontFace(GL_CCW)- glPolygonMode(GL_FILL)- quadrant: center bottom PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glBegin/End(GL_POLYGON)- glFrontFace(GL_CCW)- glPolygonMode(GL_FILL)- quadrant: center middle PV: FIRST,Fail
@@ -3168,6 +3165,33 @@ spec@nv_copy_image@nv_copy_image-formats --samples=4,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=4@Source: GL_ALPHA/Destination: GL_ALPHA,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=8,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_ALPHA/Destination: GL_ALPHA,Fail
+spec@egl 1.4@egl-arb-sync-shared-context contend,Crash
+spec@!opengl 1.0@gl-1.0-front-back-interleave,Crash
+spec@!opengl 1.0@gl-1.0-read-front-after-swap,Crash
+spec@!opengl 1.5@gl-1.5-gen-buffers-unique,Crash
+spec@egl 1.4@egl-arb-sync-shared-context churn,Crash
+spec@egl 1.4@egl-arb-sync-shared-context churn-many,Crash
+spec@egl 1.4@egl-arb-sync-shared-context egl-fence,Crash
+spec@egl 1.4@egl-arb-sync-shared-context threaded,Crash
+spec@!opengl 1.0@gl-1.0-lighting-state-updates,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@change then clear,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@color material,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@display list,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@eye-linear texgen,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@local viewer,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@non-uniform scale,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@point attenuation,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@pop lighting attributes,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@pop matrix,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@positional light,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@rescale normal,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@rotate,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@spot light,Fail
+spec@!opengl 1.0@gl-1.0-lighting-state-updates@toggle a second light,Fail
+spec@arb_sync@old-sync,Fail
+spec@arb_sync@old-sync pending-sync,Fail
+spec@ext_transform_feedback@primgen-clear scissor-clear,Fail
+spec@ext_transform_feedback@primgen-clear scissor-clear@scissored clear during primgen query,Fail
 
 dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_advanced_blend_eq,Fail
 dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_blend_eq_buffer_advanced_blend_eq,Fail

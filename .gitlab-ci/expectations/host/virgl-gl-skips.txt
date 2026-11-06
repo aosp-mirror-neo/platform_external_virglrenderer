@@ -40,7 +40,8 @@ spec@glsl-4.*@*dmat*
 spec@glsl-4.*@*dvec*
 spec@glsl-4.*@*double*
 
-# uprev Mesa in Virglrenderer
+# uprev Mesa in Virglrenderer, Timeout
+spec@arb_sync@sync-churn
 spec@egl_ext_protected_content@conformance
 
 # Crashed llvmpipe

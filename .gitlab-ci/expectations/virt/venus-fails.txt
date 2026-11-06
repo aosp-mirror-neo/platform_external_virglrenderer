@@ -10,6 +10,7 @@ dEQP-VK.binding_model.mutable_descriptor.multiple_arrays.unbounded.aliasing.upda
 dEQP-VK.draw.dynamic_rendering.partial_secondary_cmd_buff.multiple_interpolation.structured.no_sample_decoration.4_samples,Fail
 
 # uprev Mesa in Virglrenderer
+dEQP-VK.api.array.oversized_array.wsi.direct_drm.get_physical_device_surface_present_modes,Fail
 dEQP-VK.sparse_resources.image_block_shapes.2d.g8b8g8r8_422_unorm.samples_1,Fail
 dEQP-VK.wsi.direct_drm.swapchain.create.image_format,Crash
 dEQP-VK.wsi.direct_drm.swapchain.create.image_usage,Crash

@@ -323,9 +323,6 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
-spec@!opengl 1.0@rasterpos,Fail
-spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
-spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple,Fail
@@ -503,6 +500,7 @@ spec@arb_texture_rectangle@copyteximage rect samples=4,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=6,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=8,Fail
 spec@arb_texture_rectangle@copyteximage rect,Fail
+spec@egl 1.4@egl-arb-sync-shared-context threaded,Crash
 spec@ext_framebuffer_multisample@interpolation 6 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 8 centroid-edges,Fail
 spec@ext_framebuffer_multisample@no-color 6 depth single,Fail
@@ -514,12 +512,23 @@ spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec3-index-wr-before-
 spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec4-index-wr-before-gs,Crash
 
 # uprev Mesa in Virglrenderer
+spec@!opengl 1.0@gl-1.0-front-back-interleave,Crash
+spec@!opengl 1.0@gl-1.0-read-front-after-swap,Crash
+spec@!opengl 1.5@gl-1.5-gen-buffers-unique,Crash
 spec@arb_shader_group_vote@cs-all,Crash
 spec@arb_shader_group_vote@cs-any,Crash
 spec@arb_shader_group_vote@cs-eq,Crash
 spec@arb_shader_group_vote@vs-all-uniform,Crash
 spec@arb_shader_group_vote@vs-any-uniform,Crash
 spec@arb_shader_group_vote@vs-eq-uniform,Crash
+spec@arb_sync@old-sync,Fail
+spec@arb_sync@old-sync pending-sync,Fail
+spec@egl 1.4@egl-arb-sync-shared-context churn,Crash
+spec@egl 1.4@egl-arb-sync-shared-context churn-many,Crash
+spec@egl 1.4@egl-arb-sync-shared-context contend,Crash
+spec@egl 1.4@egl-arb-sync-shared-context egl-fence,Crash
+spec@ext_transform_feedback@primgen-clear scissor-clear,Fail
+spec@ext_transform_feedback@primgen-clear scissor-clear@scissored clear during primgen query,Fail
 
 KHR-GL43.blend_equation_advanced.blend_all.GL_COLORBURN_KHR_all_qualifier,Fail
 KHR-GL43.blend_equation_advanced.blend_all.GL_COLORDODGE_KHR_all_qualifier,Fail

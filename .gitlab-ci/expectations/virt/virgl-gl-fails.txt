@@ -365,9 +365,6 @@ spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
-spec@!opengl 1.0@rasterpos,Fail
-spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
-spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@!opengl 1.1@copypixels-draw-sync,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels samples=2,Fail
@@ -625,6 +622,43 @@ spec@arb_shader_group_vote@cs-eq,Crash
 spec@arb_shader_group_vote@vs-any-uniform,Crash
 spec@arb_shader_group_vote@cs-any,Crash
 spec@arb_shader_group_vote@vs-eq-uniform,Crash
+spec@arb_sync@wait-completes client-wait-zero-flush-bit,Fail
+spec@egl 1.4@egl-arb-sync-shared-context churn-many,Fail
+spec@egl 1.4@egl-arb-sync-shared-context deferred-blocked,Fail
+spec@egl 1.4@egl-arb-sync-shared-context egl-fence,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_abgr16161616f,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb1555,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb4444,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_rgb565,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xbgr16161616,Fail
+spec@!opengl 1.0@gl-1.0-front-back-interleave,Crash
+spec@arb_sync@wait-completes client-wait,Fail
+spec@arb_sync@wait-completes client-wait-zero,Fail
+spec@arb_sync@wait-completes mixed,Fail
+spec@arb_sync@wait-completes no-work,Fail
+spec@egl 1.4@egl-arb-sync-shared-context released,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_abgr8888,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb2101010,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xbgr16161616f,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb2101010,Fail
+spec@ext_transform_feedback@primgen-clear scissor-clear,Fail
+spec@ext_transform_feedback@primgen-clear scissor-clear@scissored clear during primgen query,Fail
+spec@!opengl 1.0@gl-1.0-read-front-after-swap,Crash
+spec@!opengl 1.5@gl-1.5-gen-buffers-unique,Crash
+spec@arb_sync@wait-completes client-wait-flushed,Fail
+spec@arb_sync@wait-completes client-wait-short,Fail
+spec@arb_sync@wait-completes finish,Fail
+spec@arb_sync@wait-completes finish-flushed,Fail
+spec@arb_sync@wait-completes get-status,Fail
+spec@egl 1.4@egl-arb-sync-shared-context churn,Fail
+spec@egl 1.4@egl-arb-sync-shared-context contend,Fail
+spec@egl 1.4@egl-arb-sync-shared-context deferred,Fail
+spec@egl 1.4@egl-arb-sync-shared-context threaded,Fail
+spec@egl 1.4@egl-arb-sync-shared-context unflushed,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_abgr16161616,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_abgr2101010,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xbgr2101010,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xbgr8888,Fail
 
 dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_advanced_blend_eq,Fail
 dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_blend_eq_buffer_advanced_blend_eq,Fail
