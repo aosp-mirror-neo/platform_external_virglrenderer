@@ -38,13 +38,14 @@ struct vrend_transfer_info;
 struct pipe_resource;
 
 struct virgl_context_blob {
-   /* valid fd or pipe resource */
+   /* valid fd or pipe resource or AHB */
    enum virgl_resource_fd_type type;
    union {
       int fd;
       uint32_t opaque_handle;
       struct pipe_resource *pipe_resource;
    } u;
+   struct AHardwareBuffer *ahb;
 
    uint32_t map_info;
 

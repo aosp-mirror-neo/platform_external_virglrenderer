@@ -46,6 +46,10 @@ virgl_resource_destroy_func(void *val)
 
    if (res->pipe_resource)
       pipe_callbacks.unref(res->pipe_resource, pipe_callbacks.data);
+#ifdef __ANDROID__
+   if (res->ahb)
+      AHardwareBuffer_release(res->ahb);
+#endif
    if ((res->fd_type != VIRGL_RESOURCE_FD_INVALID) &&
        (res->fd_type != VIRGL_RESOURCE_OPAQUE_HANDLE))
       close(res->fd);
@@ -128,6 +132,31 @@ virgl_resource_create_from_pipe(uint32_t res_id,
    res->iov_count = iov_count;
 
    return res;
+}
+
+struct virgl_resource *
+virgl_resource_create_from_ahb(uint32_t res_id,
+                               struct AHardwareBuffer *ahb)
+{
+#ifdef __ANDROID__
+   struct virgl_resource *res;
+
+   assert(ahb);
+
+   res = virgl_resource_create(res_id);
+   if (!res) {
+      AHardwareBuffer_release(ahb);
+      return NULL;
+   }
+
+   res->ahb = ahb;
+
+   return res;
+#else
+   (void)res_id;
+   (void)ahb;
+   return NULL;
+#endif
 }
 
 struct virgl_resource *
@@ -273,4 +302,23 @@ virgl_resource_export_fd(struct virgl_resource *res, int *fd)
    }
 
    return VIRGL_RESOURCE_FD_INVALID;
+}
+
+int
+virgl_resource_export_ahb(struct virgl_resource *res,
+                          struct AHardwareBuffer **out_ahb)
+{
+#ifdef __ANDROID__
+   if (!res->ahb)
+      return -EINVAL;
+
+   assert(res->fd_type == VIRGL_RESOURCE_FD_INVALID);
+   AHardwareBuffer_acquire(res->ahb);
+   *out_ahb = res->ahb;
+   return 0;
+#else
+   (void)res;
+   (void)out_ahb;
+   return -EOPNOTSUPP;
+#endif
 }

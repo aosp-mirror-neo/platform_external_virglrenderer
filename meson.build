@@ -100,6 +100,7 @@ if with_host_android
   android_dep = declare_dependency(
     dependencies : [
       cc.find_library('log', required : true),
+      cc.find_library('nativewindow', required : true),
     ],
   )
 endif

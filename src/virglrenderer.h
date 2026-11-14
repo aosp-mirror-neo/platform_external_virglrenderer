@@ -510,6 +510,9 @@ virgl_renderer_submit_cmd2(void *buffer,
                            uint64_t *in_fence_ids,
                            uint32_t num_in_fences);
 
+VIRGL_EXPORT int
+virgl_renderer_resource_export_ahb(uint32_t res_id, void **out_ahb);
+
 /* vtest semi-private APIs: */
 VIRGL_EXPORT int virgl_renderer_attach_fence(int ctx_id, int fence_fd);
 VIRGL_EXPORT int virgl_renderer_get_fence_fd(uint64_t fence_id);

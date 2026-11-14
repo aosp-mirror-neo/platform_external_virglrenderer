@@ -1323,7 +1323,7 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
    TRACE_FUNC();
    struct virgl_resource *res;
    struct virgl_context *ctx;
-   struct virgl_context_blob blob;
+   struct virgl_context_blob blob = { 0 };
    bool has_host_storage;
    bool has_guest_storage;
    int ret;
@@ -1397,6 +1397,10 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
                                           &blob.vulkan_info);
       if (!res)
          return -ENOMEM;
+   } else if (blob.ahb) {
+      res = virgl_resource_create_from_ahb(args->res_handle, blob.ahb);
+      if (!res)
+         return -ENOMEM;
    } else {
       res = virgl_resource_create_from_pipe(args->res_handle,
                                             blob.u.pipe_resource,
@@ -1420,7 +1424,7 @@ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *o
    uint64_t map_size = 0;
    struct virgl_context *ctx = NULL;
    struct virgl_resource *res = virgl_resource_lookup(res_handle);
-   if (!res || res->mapped)
+   if (!res || res->mapped || res->ahb)
       return -EINVAL;
 
    if (res->pipe_resource) {
@@ -1488,7 +1492,7 @@ int virgl_renderer_resource_map_fixed(uint32_t res_handle, void *addr)
    struct virgl_context *ctx = NULL;
    struct virgl_resource *res = virgl_resource_lookup(res_handle);
 
-   if (!res)
+   if (!res || res->ahb)
       return -EINVAL;
 
    enum virgl_resource_fd_type fd_type = res->fd_type;
@@ -1541,7 +1545,7 @@ int virgl_renderer_resource_unmap(uint32_t res_handle)
    TRACE_FUNC();
    int ret = 0;
    struct virgl_resource *res = virgl_resource_lookup(res_handle);
-   if (!res || !res->mapped)
+   if (!res || !res->mapped || res->ahb)
       return -EINVAL;
 
    if (res->mapped_from_pipe_resource) {
@@ -1579,7 +1583,7 @@ int virgl_renderer_resource_get_map_info(uint32_t res_handle, uint32_t *map_info
 {
    TRACE_FUNC();
    struct virgl_resource *res = virgl_resource_lookup(res_handle);
-   if (!res)
+   if (!res || res->ahb)
       return -EINVAL;
 
    if ((res->map_info & VIRGL_RENDERER_MAP_CACHE_MASK) ==
@@ -1617,6 +1621,18 @@ virgl_renderer_resource_export_blob(uint32_t res_id, uint32_t *fd_type, int *fd)
    }
 
    return 0;
+}
+
+int
+virgl_renderer_resource_export_ahb(uint32_t res_id, void **out_ahb)
+{
+   TRACE_FUNC();
+
+   struct virgl_resource *res = virgl_resource_lookup(res_id);
+   if (!res)
+      return -EINVAL;
+
+   return virgl_resource_export_ahb(res, (struct AHardwareBuffer **)out_ahb);
 }
 
 int

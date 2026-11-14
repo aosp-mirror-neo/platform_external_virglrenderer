@@ -31,6 +31,11 @@
 struct iovec;
 struct pipe_resource;
 struct virgl_context;
+#ifdef __ANDROID__
+#include <android/hardware_buffer.h>
+#else
+struct AHardwareBuffer;
+#endif
 
 enum virgl_resource_fd_type {
    VIRGL_RESOURCE_FD_DMABUF,
@@ -82,6 +87,7 @@ struct virgl_resource {
    uint32_t res_id;
 
    struct pipe_resource *pipe_resource;
+   struct AHardwareBuffer *ahb;
 
    /* valid fd or handle type: */
    enum virgl_resource_fd_type fd_type;
@@ -140,6 +146,10 @@ virgl_resource_create_from_pipe(uint32_t res_id,
                                 int iov_count);
 
 struct virgl_resource *
+virgl_resource_create_from_ahb(uint32_t res_id,
+                               struct AHardwareBuffer *ahb);
+
+struct virgl_resource *
 virgl_resource_create_from_fd(uint32_t res_id,
                               enum virgl_resource_fd_type fd_type,
                               int fd,
@@ -173,5 +183,9 @@ virgl_resource_detach_iov(struct virgl_resource *res);
 
 enum virgl_resource_fd_type
 virgl_resource_export_fd(struct virgl_resource *res, int *fd);
+
+int
+virgl_resource_export_ahb(struct virgl_resource *res,
+                          struct AHardwareBuffer **out_ahb);
 
 #endif /* VIRGL_RESOURCE_H */
