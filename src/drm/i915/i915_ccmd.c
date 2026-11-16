@@ -106,7 +106,7 @@ i915_ccmd_ioctl_simple(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
 
       default:
          drm_err("unsupported ioctl param: %08x (%u)", req->cmd, iocnr);
-         return EINVAL;
+         return -EINVAL;
       }
       break;
    }
