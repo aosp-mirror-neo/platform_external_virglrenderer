@@ -122,7 +122,7 @@ drm_context_submit_cmd_dispatch(struct drm_context *dctx, const struct vdrm_ccmd
    free(buf);
 
    if (ret) {
-      drm_err("%s: dispatch failed: %d (%s)", ccmd->name, ret, strerror(errno));
+      drm_err("%s: dispatch failed: %d (%s)", ccmd->name, ret, strerror(-ret));
       goto free_response_buffer;
    }
 
