@@ -32,6 +32,12 @@
 #ifdef HAVE_EVENTFD_H
 #include <sys/eventfd.h>
 #endif
+#ifdef HAVE_EVENTFD_EMULATION
+#include <fcntl.h>
+#ifndef F_SETNOSIGPIPE
+#include <sys/socket.h>
+#endif
+#endif
 #include <unistd.h>
 
 #include "util/os_misc.h"
@@ -88,21 +94,125 @@ bool equal_func(const void *key1, const void *key2)
 
 bool has_eventfd(void)
 {
-#ifdef HAVE_EVENTFD_H
+#if defined(HAVE_EVENTFD_H) || defined(HAVE_EVENTFD_EMULATION)
    return true;
 #else
    return false;
 #endif
 }
 
-int create_eventfd(unsigned int initval)
-{
 #ifdef HAVE_EVENTFD_H
-   return eventfd(initval, EFD_CLOEXEC | EFD_NONBLOCK);
+
+int create_eventfd(unsigned int initval, struct virgl_eventfd *out_eventfd)
+{
+   const int fd = eventfd(initval, EFD_CLOEXEC | EFD_NONBLOCK);
+   if (fd < 0)
+      return -1;
+
+   /* a real eventfd is both readable and writable */
+   out_eventfd->read_fd = fd;
+   out_eventfd->write_fd = fd;
+
+   return 0;
+}
+
+#elif defined(HAVE_EVENTFD_EMULATION)
+
+static int set_fd_flags(int fd)
+{
+   int flags = fcntl(fd, F_GETFL);
+   if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+      return -1;
+
+   flags = fcntl(fd, F_GETFD);
+   if (flags < 0 || fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0)
+      return -1;
+
+   return 0;
+}
+
+int create_eventfd(unsigned int initval, struct virgl_eventfd *out_eventfd)
+{
+   int fds[2];
+   bool needs_fd_flags = false;
+
+   out_eventfd->read_fd = -1;
+   out_eventfd->write_fd = -1;
+
+#ifdef F_SETNOSIGPIPE
+#ifdef HAVE_PIPE2
+   const int ret = pipe2(fds, O_CLOEXEC | O_NONBLOCK);
 #else
-   (void)initval;
-   return -1;
+   const int ret = pipe(fds);
+   needs_fd_flags = true;
 #endif
+   if (ret)
+      return -1;
+
+   /* A render worker can signal after the proxy closes the read end.
+    * This flag follows the write end when sent to the worker via SCM_RIGHTS.
+    */
+   if (fcntl(fds[1], F_SETNOSIGPIPE, 1) < 0)
+      goto fail;
+#else
+   /* Use a socket so writes can suppress SIGPIPE with MSG_NOSIGNAL. */
+   int type = SOCK_DGRAM;
+#ifdef SOCK_CLOEXEC
+   type |= SOCK_CLOEXEC;
+#else
+   needs_fd_flags = true;
+#endif
+#ifdef SOCK_NONBLOCK
+   type |= SOCK_NONBLOCK;
+#else
+   needs_fd_flags = true;
+#endif
+   if (socketpair(AF_UNIX, type, 0, fds))
+      return -1;
+#endif
+
+   if (needs_fd_flags && (set_fd_flags(fds[0]) || set_fd_flags(fds[1])))
+      goto fail;
+
+   out_eventfd->read_fd = fds[0];
+   out_eventfd->write_fd = fds[1];
+
+   /* eventfd(2) starts out readable when initval is non-zero */
+   if (initval && write_eventfd(out_eventfd->write_fd, initval)) {
+      close_eventfd(out_eventfd);
+      return -1;
+   }
+
+   return 0;
+
+fail:
+   close(fds[0]);
+   close(fds[1]);
+   return -1;
+}
+
+#else
+
+int create_eventfd(UNUSED unsigned int initval, struct virgl_eventfd *out_eventfd)
+{
+   out_eventfd->read_fd = -1;
+   out_eventfd->write_fd = -1;
+   return -1;
+}
+
+#endif
+
+void close_eventfd(struct virgl_eventfd *eventfd)
+{
+   if (eventfd->read_fd >= 0)
+      close(eventfd->read_fd);
+
+   /* with a real eventfd, read_fd and write_fd are the same fd */
+   if (eventfd->write_fd >= 0 && eventfd->write_fd != eventfd->read_fd)
+      close(eventfd->write_fd);
+
+   eventfd->read_fd = -1;
+   eventfd->write_fd = -1;
 }
 
 int write_eventfd(int fd, uint64_t val)
@@ -112,7 +222,14 @@ int write_eventfd(int fd, uint64_t val)
    ssize_t ret = 0;
 
    while (count) {
+#if defined(HAVE_EVENTFD_EMULATION) && !defined(F_SETNOSIGPIPE)
+      ret = send(fd, buf, count, MSG_NOSIGNAL);
+      /* vtest sync waits can also pass a FIFO to this helper. */
+      if (ret < 0 && errno == ENOTSOCK)
+         ret = write(fd, buf, count);
+#else
       ret = write(fd, buf, count);
+#endif
       if (ret < 0) {
          if (errno == EINTR)
             continue;

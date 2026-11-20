@@ -40,14 +40,12 @@
 
 #include "virgl_context.h"
 #include "virgl_fence.h"
+#include "virgl_util.h"
 
 #include <sys/uio.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
-#ifdef HAVE_EVENTFD_H
-#include <sys/eventfd.h>
-#endif
-#if defined (__FreeBSD__)
+#if defined(__FreeBSD__) || defined(HAVE_EVENTFD_EMULATION)
 #include <sys/stat.h>
 #endif
 
@@ -110,7 +108,7 @@ struct vtest_timeline_submit {
 struct vtest_sync_wait {
    struct list_head head;
 
-   int fd;
+   struct virgl_eventfd eventfd;
 
    uint32_t flags;
    uint64_t valid_before;
@@ -342,7 +340,7 @@ static void vtest_free_sync_wait(struct vtest_sync_wait *wait)
       if (wait->syncs[i])
          vtest_unref_sync(wait->syncs[i]);
    }
-   close(wait->fd);
+   close_eventfd(&wait->eventfd);
    free(wait);
 }
 
@@ -983,10 +981,8 @@ int vtest_get_param(UNUSED uint32_t length_dw)
    case VCMD_PARAM_MAX_TIMELINE_COUNT:
       resp[0] = true;
       /* TODO until we have a timerfd */
-#ifdef HAVE_EVENTFD_H
-      if (!getenv("VIRGL_DISABLE_MT"))
+      if (has_eventfd() && !getenv("VIRGL_DISABLE_MT"))
          resp[1] = VTEST_MAX_TIMELINE_COUNT;
-#endif
       break;
    case VCMD_PARAM_HAS_TIMELINE_SYNCOBJ: {
 #ifdef ENABLE_DRM
@@ -1913,15 +1909,7 @@ static uint64_t vtest_gettime(uint32_t offset_ms)
 
 static inline void write_ready(int fd)
 {
-#ifdef __GNUC__
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wunused-result"
-#endif
-   static const uint64_t val = 1;
-   write(fd, &val, sizeof(val));
-#ifdef __GNUC__
-#  pragma GCC diagnostic pop
-#endif
+   write_eventfd(fd, 1);
 }
 
 
@@ -1969,7 +1957,7 @@ static void vtest_signal_sync(struct vtest_sync *sync, uint64_t value)
 
          if (is_ready) {
             list_del(&wait->head);
-            write_ready(wait->fd);
+            write_ready(wait->eventfd.write_fd);
             vtest_free_sync_wait(wait);
          }
       }
@@ -2121,6 +2109,45 @@ int vtest_sync_write(UNUSED uint32_t length_dw)
    return 0;
 }
 
+static int vtest_create_sync_wait_eventfd(struct virgl_eventfd *eventfd)
+{
+#ifdef HAVE_EVENTFD_EMULATION
+   /* The client polls its fd after the server closes its copy. A read/write
+    * FIFO keeps the writer open for the lifetime of the fd, so a wait that
+    * was never signaled stays quiet when the server frees it.
+    */
+   const char *tmpdir = getenv("TMPDIR");
+   if (!tmpdir || !*tmpdir)
+      tmpdir = "/tmp";
+
+   const char fifo_name[] = "/wait";
+   char path[PATH_MAX];
+   char dir[sizeof(path) - sizeof(fifo_name) + 1];
+   int len = snprintf(dir, sizeof(dir), "%s/virgl-vtest-XXXXXX", tmpdir);
+   if (len < 0 || (size_t)len >= sizeof(dir) || !mkdtemp(dir))
+      return -1;
+
+   snprintf(path, sizeof(path), "%s%s", dir, fifo_name);
+   int fd = -1;
+   if (mkfifo(path, S_IRUSR | S_IWUSR) == 0) {
+      fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+      if (unlink(path) && fd >= 0) {
+         close(fd);
+         fd = -1;
+      }
+   }
+   rmdir(dir);
+   if (fd < 0)
+      return -1;
+
+   eventfd->read_fd = fd;
+   eventfd->write_fd = fd;
+   return 0;
+#else
+   return create_eventfd(0, eventfd);
+#endif
+}
+
 static int vtest_sync_wait_init(struct vtest_sync_wait *wait,
                                 struct vtest_context *ctx,
                                 uint32_t flags,
@@ -2130,14 +2157,10 @@ static int vtest_sync_wait_init(struct vtest_sync_wait *wait,
 {
    uint32_t i;
 
-#ifdef HAVE_EVENTFD_H
-   wait->fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-#else
-   /* TODO pipe */
-   wait->fd = -1;
-#endif
-   if (wait->fd < 0)
+   if (vtest_create_sync_wait_eventfd(&wait->eventfd)) {
+      free(wait);
       return -ENODEV;
+   }
 
    wait->flags = flags;
    wait->valid_before = vtest_gettime(timeout);
@@ -2225,14 +2248,14 @@ int vtest_sync_wait(uint32_t length_dw)
       is_ready = true;
 
    if (is_ready) {
-      write_ready(wait->fd);
+      write_ready(wait->eventfd.write_fd);
    }
 
    resp_buf[VTEST_CMD_LEN] = 0;
    resp_buf[VTEST_CMD_ID] = VCMD_SYNC_WAIT;
    ret = vtest_block_write(ctx->out_fd, resp_buf, sizeof(resp_buf));
    if (ret >= 0)
-      ret = vtest_send_fd(ctx->out_fd, wait->fd);
+      ret = vtest_send_fd(ctx->out_fd, wait->eventfd.read_fd);
 
    if (ret || is_ready || !timeout)
       vtest_free_sync_wait(wait);

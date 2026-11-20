@@ -371,7 +371,7 @@ struct global_renderer_state {
    cnd_t poll_cond;
 
    float tess_factors[6];
-   int eventfd;
+   struct virgl_eventfd eventfd;
 
    uint32_t max_draw_buffers;
    uint32_t max_texture_buffer_size;
@@ -7294,7 +7294,7 @@ static void vrend_renderer_check_queries(void);
 
 void vrend_renderer_poll(void) {
    if (vrend_state.use_async_fence_cb) {
-      flush_eventfd(vrend_state.eventfd);
+      flush_eventfd(vrend_state.eventfd.read_fd);
       mtx_lock(&vrend_state.poll_mutex);
 
       /* queries must be checked before fences are retired. */
@@ -7327,7 +7327,7 @@ static void wait_sync(struct vrend_fence *fence)
    mtx_unlock(&vrend_state.fence_mutex);
 
    if (!vrend_state.use_async_fence_cb) {
-      if (write_eventfd(vrend_state.eventfd, 1))
+      if (write_eventfd(vrend_state.eventfd.write_fd, 1))
          perror("failed to write to eventfd\n");
       return;
    }
@@ -7340,7 +7340,7 @@ static void wait_sync(struct vrend_fence *fence)
     * the current fence. */
    if (signal_poll) {
       mtx_lock(&vrend_state.poll_mutex);
-      if (write_eventfd(vrend_state.eventfd, 1))
+      if (write_eventfd(vrend_state.eventfd.write_fd, 1))
          perror("failed to write to eventfd\n");
 
       struct timespec ts;
@@ -7418,9 +7418,8 @@ static void vrend_renderer_use_threaded_sync(void)
       return;
    }
 
-   if (vrend_state.eventfd == -1) {
-      vrend_state.eventfd = create_eventfd(0);
-      if (vrend_state.eventfd == -1) {
+   if (vrend_state.eventfd.read_fd == -1) {
+      if (create_eventfd(0, &vrend_state.eventfd)) {
          virgl_error("Failed to create eventfd\n");
          vrend_clicbs->destroy_gl_context_surfaceless(vrend_state.sync_context);
          return;
@@ -7437,8 +7436,7 @@ static void vrend_renderer_use_threaded_sync(void)
 
    vrend_state.sync_thread = u_thread_create(thread_sync, NULL);
    if (!vrend_state.sync_thread) {
-      close(vrend_state.eventfd);
-      vrend_state.eventfd = -1;
+      close_eventfd(&vrend_state.eventfd);
       vrend_clicbs->destroy_gl_context_surfaceless(vrend_state.sync_context);
       cnd_destroy(&vrend_state.fence_cond);
       mtx_destroy(&vrend_state.fence_mutex);
@@ -7734,7 +7732,8 @@ int vrend_renderer_init(const struct vrend_if_cbs *cbs, uint32_t flags)
       goto fail;
    }
 
-   vrend_state.eventfd = -1;
+   vrend_state.eventfd.read_fd = -1;
+   vrend_state.eventfd.write_fd = -1;
    if (flags & VREND_USE_THREAD_SYNC) {
       if (flags & VREND_USE_ASYNC_FENCE_CB)
          vrend_state.use_async_fence_cb = true;
@@ -7790,10 +7789,7 @@ vrend_renderer_fini(void)
 {
    vrend_state.finishing = true;
 
-   if (vrend_state.eventfd != -1) {
-      close(vrend_state.eventfd);
-      vrend_state.eventfd = -1;
-   }
+   close_eventfd(&vrend_state.eventfd);
 
    vrend_deinit_venus_interop();
 
@@ -11473,7 +11469,7 @@ void vrend_renderer_check_fences(void)
    list_inithead(&retired_fences);
 
    if (vrend_state.sync_thread) {
-      flush_eventfd(vrend_state.eventfd);
+      flush_eventfd(vrend_state.eventfd.read_fd);
       mtx_lock(&vrend_state.fence_mutex);
       list_for_each_entry_safe(struct vrend_fence, fence, &vrend_state.fence_list, fences) {
          /* vrend_free_fences_for_context might have marked the fence invalid
@@ -13487,7 +13483,7 @@ void vrend_renderer_reset(void)
 
 int vrend_renderer_get_poll_fd(void)
 {
-   int fd = vrend_state.eventfd;
+   int fd = vrend_state.eventfd.read_fd;
    if (vrend_state.use_async_fence_cb && fd < 0)
       virgl_error("Failed to duplicate eventfd: error=%d\n", errno);
    return fd;

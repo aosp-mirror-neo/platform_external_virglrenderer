@@ -219,6 +219,12 @@ endif
 
 if cc.has_header('sys/eventfd.h')
    conf_data.set('HAVE_EVENTFD_H', 1)
+elif not with_host_windows
+   # emulate eventfd (e.g. on macOS)
+   conf_data.set('HAVE_EVENTFD_EMULATION', 1)
+   if cc.has_function('pipe2', prefix : '#include <unistd.h>', args : '-D_GNU_SOURCE')
+      conf_data.set('HAVE_PIPE2', 1)
+   endif
 endif
 
 if cc.has_header('sys/select.h')

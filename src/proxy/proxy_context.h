@@ -52,7 +52,7 @@ struct proxy_context {
 
    struct {
       /* when VIRGL_RENDERER_THREAD_SYNC is set */
-      int fence_eventfd;
+      struct virgl_eventfd fence_eventfd;
 
       /* when VIRGL_RENDERER_ASYNC_FENCE_CB is also set */
       thrd_t thread;

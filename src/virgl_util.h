@@ -70,9 +70,33 @@ struct hash_entry *hash_table_search(struct hash_table *ht, uint32_t key);
 bool equal_func(const void *key1, const void *key2);
 
 bool has_eventfd(void);
-int create_eventfd(unsigned int initval);
+
+/*
+ * Eventfd, or its emulation on systems without one (e.g. macOS).
+ *
+ * With a real eventfd, both read_fd and write_fd refer to the same fd.
+ * With emulation, they are separate ends backed by a pipe or socket pair:
+ *
+ *  - read_fd  is the end to poll for readability and to drain (either with
+ *             flush_eventfd or read(2)) once signalled
+ *  - write_fd is the end to signal with write_eventfd
+ *
+ * Pass only the end needed by each recipient:
+ * a fd that is only polled/read (e.g. by a client) should be read_fd, and
+ * a fd that is only signalled (e.g. received by the render server) should
+ * be write_fd.  Note that unlike with a real eventfd, each read(2) returns
+ * a single 8-byte value written by write_eventfd rather than the
+ * accumulated counter.
+ */
+struct virgl_eventfd {
+   int read_fd;
+   int write_fd;
+};
+
+int create_eventfd(unsigned int initval, struct virgl_eventfd *eventfd);
 int write_eventfd(int fd, uint64_t val);
 void flush_eventfd(int fd);
+void close_eventfd(struct virgl_eventfd *eventfd);
 
 void virgl_override_log_level(enum virgl_log_level_flags log_level);
 void virgl_log_set_handler(virgl_log_callback_type log_cb,

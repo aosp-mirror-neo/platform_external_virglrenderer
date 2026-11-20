@@ -141,8 +141,8 @@ proxy_context_retire_timeline_fences_locked(struct proxy_context *ctx,
 static void
 proxy_context_retire_fences_internal(struct proxy_context *ctx)
 {
-   if (ctx->sync_thread.fence_eventfd >= 0)
-      flush_eventfd(ctx->sync_thread.fence_eventfd);
+   if (ctx->sync_thread.fence_eventfd.read_fd >= 0)
+      flush_eventfd(ctx->sync_thread.fence_eventfd.read_fd);
 
    if (proxy_renderer.flags & VIRGL_RENDERER_ASYNC_FENCE_CB)
       mtx_lock(&ctx->timeline_mutex);
@@ -168,7 +168,7 @@ proxy_context_sync_thread(void *arg)
    struct proxy_context *ctx = arg;
    struct pollfd poll_fds[2] = {
       [0] = {
-         .fd = ctx->sync_thread.fence_eventfd,
+         .fd = ctx->sync_thread.fence_eventfd.read_fd,
          .events = POLLIN,
       },
       [1] = {
@@ -263,7 +263,7 @@ proxy_context_get_fencing_fd(struct virgl_context *base)
    struct proxy_context *ctx = (struct proxy_context *)base;
 
    assert(!(proxy_renderer.flags & VIRGL_RENDERER_ASYNC_FENCE_CB));
-   return ctx->sync_thread.fence_eventfd;
+   return ctx->sync_thread.fence_eventfd.read_fd;
 }
 
 static int
@@ -515,14 +515,14 @@ proxy_context_destroy(struct virgl_context *base)
    if (!proxy_client_destroy_context(ctx->client, ctx->base.ctx_id))
       proxy_log("failed to destroy ctx %d", ctx->base.ctx_id);
 
-   if (ctx->sync_thread.fence_eventfd >= 0) {
+   if (ctx->sync_thread.fence_eventfd.read_fd >= 0) {
       if (ctx->sync_thread.created) {
          ctx->sync_thread.stop = true;
-         write_eventfd(ctx->sync_thread.fence_eventfd, 1);
+         write_eventfd(ctx->sync_thread.fence_eventfd.write_fd, 1);
          thrd_join(ctx->sync_thread.thread, NULL);
       }
 
-      close(ctx->sync_thread.fence_eventfd);
+      close_eventfd(&ctx->sync_thread.fence_eventfd);
    }
 
    if (ctx->shmem.ptr)
@@ -579,8 +579,7 @@ proxy_context_init_fencing(struct proxy_context *ctx)
    if (!(proxy_renderer.flags & VIRGL_RENDERER_THREAD_SYNC))
       return true;
 
-   ctx->sync_thread.fence_eventfd = create_eventfd(0);
-   if (ctx->sync_thread.fence_eventfd < 0) {
+   if (create_eventfd(0, &ctx->sync_thread.fence_eventfd)) {
       proxy_log("failed to create fence eventfd");
       return false;
    }
@@ -668,7 +667,8 @@ proxy_context_init(struct proxy_context *ctx, uint32_t ctx_flags)
       .flags = ctx_flags,
       .shmem_size = ctx->shmem.size,
    };
-   const int req_fds[2] = { ctx->shmem.fd, ctx->sync_thread.fence_eventfd };
+   /* the render server only signals the eventfd; pass the write end */
+   const int req_fds[2] = { ctx->shmem.fd, ctx->sync_thread.fence_eventfd.write_fd };
    const int req_fd_count = req_fds[1] >= 0 ? 2 : 1;
    if (!proxy_socket_send_request_with_fds(&ctx->socket, &req, sizeof(req), req_fds,
                                            req_fd_count)) {
@@ -707,7 +707,8 @@ proxy_context_create(uint32_t ctx_id,
    mtx_init(&ctx->timeline_mutex, mtx_plain);
    mtx_init(&ctx->free_fences_mutex, mtx_plain);
    list_inithead(&ctx->free_fences);
-   ctx->sync_thread.fence_eventfd = -1;
+   ctx->sync_thread.fence_eventfd.read_fd = -1;
+   ctx->sync_thread.fence_eventfd.write_fd = -1;
 
    if (!proxy_context_init(ctx, ctx_flags)) {
       proxy_context_destroy(&ctx->base);
