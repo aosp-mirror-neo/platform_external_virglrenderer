@@ -19,7 +19,7 @@ static int udmabuf_dev_fd = -1;
 static void
 vkr_udmabuf_init_once(void)
 {
-   udmabuf_dev_fd = open("/dev/udmabuf", O_RDWR);
+   udmabuf_dev_fd = open("/dev/udmabuf", O_RDONLY | O_CLOEXEC);
    if (udmabuf_dev_fd < 0) {
       vkr_log("failed to open udmabuf device: %s", strerror(errno));
    }
