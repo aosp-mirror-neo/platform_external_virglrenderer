@@ -58,7 +58,7 @@ vkr_physical_device_mem_type_spoof(const struct vkr_physical_device *physical_de
                                    uint32_t *mem_type_bits)
 {
    if (physical_dev->mem_type_spoof)
-      *mem_type_bits = (*mem_type_bits << 1) | 1u;
+      *mem_type_bits = (*mem_type_bits << 1) | (*mem_type_bits & 1u);
 }
 
 #endif /* VKR_PHYSICAL_DEVICE_H */

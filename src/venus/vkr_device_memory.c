@@ -350,11 +350,13 @@ vkr_shm_get_host_ptr_info_from_allocation_info(
       const VkResult result = dev->GetMemoryHostPointerPropertiesEXT(
          dev->base.handle.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
          shm->ptr, &host_props);
-      /* alloc_info->memoryTypeIndex is the driver's index, which the memory
-       * type spoof may have shifted from the one the guest asked for
-       */
-      if (result != VK_SUCCESS ||
-          !(host_props.memoryTypeBits & (1u << alloc_info->memoryTypeIndex))) {
+      if (result != VK_SUCCESS) {
+         vkr_shm_destroy(shm);
+         return result;
+      }
+
+      vkr_physical_device_mem_type_spoof(physical_dev, &host_props.memoryTypeBits);
+      if (!(host_props.memoryTypeBits & (1u << alloc_info->memoryTypeIndex))) {
          vkr_log("host memory import is unsupported for memory type %u "
                  "(vk ret %d, memoryTypeBits 0x%x)",
                  alloc_info->memoryTypeIndex, result, host_props.memoryTypeBits);
@@ -622,16 +624,15 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
    struct vkr_physical_device *physical_dev = dev->physical_device;
 
    VkMemoryAllocateInfo *alloc_info = (VkMemoryAllocateInfo *)args->pAllocateInfo;
-   const uint32_t mem_type_index = alloc_info->memoryTypeIndex;
-   if (unlikely(mem_type_index >= physical_dev->memory_properties.memoryTypeCount)) {
+   if (unlikely(alloc_info->memoryTypeIndex >=
+                physical_dev->memory_properties.memoryTypeCount)) {
       args->ret = VK_ERROR_UNKNOWN;
       return;
    }
 
    const uint32_t property_flags =
-      physical_dev->memory_properties.memoryTypes[mem_type_index].propertyFlags;
-   if (physical_dev->mem_type_spoof && mem_type_index > 0)
-      alloc_info->memoryTypeIndex = mem_type_index - 1;
+      physical_dev->memory_properties.memoryTypes[alloc_info->memoryTypeIndex]
+         .propertyFlags;
 
    struct vkr_blob_mem_info blob_info = {
       .fd = { .fd = -1 },
@@ -676,6 +677,9 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
       if (args->ret != VK_SUCCESS)
          return;
    }
+
+   if (physical_dev->mem_type_spoof && alloc_info->memoryTypeIndex > 0)
+      alloc_info->memoryTypeIndex--;
 
    struct vkr_device_memory *mem = vkr_device_memory_create_and_add(ctx, args);
    if (!mem) {
