@@ -10,17 +10,36 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#if defined(HAVE_LINUX_UDMABUF_H) && defined(HAVE_MEMFD_CREATE)
+#include <fcntl.h>
+#include <linux/udmabuf.h>
+#include <sys/ioctl.h>
+#endif
+
 #include "util/anon_file.h"
 #include "vn_protocol_renderer_transport.h"
 
 #include "vkr_device_memory_gen.h"
 #include "vkr_physical_device.h"
 
+static void
+vkr_sanitize_forced_import_info(VkMemoryAllocateInfo *alloc_info)
+{
+   void *prev_of_dedicated =
+      vkr_find_prev_struct(alloc_info, VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO);
+   if (prev_of_dedicated) {
+      const VkMemoryDedicatedAllocateInfo *dedicated_info =
+         vkr_pnext_get_next(prev_of_dedicated);
+      vkr_pnext_set_next(prev_of_dedicated, dedicated_info->pNext);
+   }
+
+   VkMemoryAllocateFlagsInfo *alloc_flags_info =
+      vkr_find_struct(alloc_info->pNext, VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO);
+   if (alloc_flags_info)
+      alloc_flags_info->flags &= ~VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT;
+}
+
 #if defined(HAVE_LINUX_UDMABUF_H) && defined(HAVE_MEMFD_CREATE)
-#include <fcntl.h>
-#include <linux/udmabuf.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
 
 static VkResult
 vkr_udmabuf_get_fd_info_from_allocation_info(struct vkr_physical_device *physical_dev,
@@ -455,6 +474,7 @@ vkr_fix_export_info(struct vkr_device *dev,
          return result;
 
       alloc_info->pNext = &local_info->fd;
+      vkr_sanitize_forced_import_info(alloc_info);
       local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
       return VK_SUCCESS;
    }
@@ -480,6 +500,7 @@ vkr_fix_export_info(struct vkr_device *dev,
 
       alloc_info->pNext = &local_info->host_ptr;
       alloc_info->allocationSize = local_info->shm->size;
+      vkr_sanitize_forced_import_info(alloc_info);
       local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_SHM;
       return VK_SUCCESS;
    }
@@ -520,6 +541,7 @@ vkr_fix_mappable_info(struct vkr_device *dev,
          return result;
 
       alloc_info->pNext = &local_info->fd;
+      vkr_sanitize_forced_import_info(alloc_info);
       local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
       return VK_SUCCESS;
    }
@@ -531,6 +553,7 @@ vkr_fix_mappable_info(struct vkr_device *dev,
          return result;
 
       alloc_info->pNext = &local_info->fd;
+      vkr_sanitize_forced_import_info(alloc_info);
       local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
       return VK_SUCCESS;
    }
@@ -543,6 +566,7 @@ vkr_fix_mappable_info(struct vkr_device *dev,
 
       alloc_info->pNext = &local_info->host_ptr;
       alloc_info->allocationSize = local_info->shm->size;
+      vkr_sanitize_forced_import_info(alloc_info);
       local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_SHM;
       return VK_SUCCESS;
    }
