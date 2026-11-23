@@ -290,6 +290,9 @@ vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_
          physical_dev->gbm_device = vkr_physical_device_get_gbm_device();
       else
          vkr_log("missing VK_EXT_external_memory_dma_buf for gbm import!");
+   } else if (VKR_DEBUG(HOST_PTR)) {
+      if (!physical_dev->EXT_external_memory_host)
+         vkr_log("missing VK_EXT_external_memory_host for host ptr import!");
    }
 }
 

@@ -547,7 +547,7 @@ vkr_fix_mappable_info(struct vkr_device *dev,
    const bool support_export = physical_dev->is_dma_buf_fd_export_supported ||
                                physical_dev->is_opaque_fd_export_supported;
    const bool use_host_ptr_import =
-      physical_dev->EXT_external_memory_host && !support_export;
+      physical_dev->EXT_external_memory_host && (!support_export || VKR_DEBUG(HOST_PTR));
 
    if (force_udmabuf_import) {
       /* To be noted, there are 2 limits for udmabuf:
