@@ -39,6 +39,27 @@ vkr_sanitize_forced_import_info(VkMemoryAllocateInfo *alloc_info)
       alloc_flags_info->flags &= ~VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT;
 }
 
+static uint32_t
+vkr_select_mem_type_index(const struct vkr_physical_device *physical_dev,
+                          uint32_t mem_type_bits,
+                          uint32_t cur_index,
+                          VkMemoryPropertyFlags preferred_flags)
+{
+   if (!mem_type_bits || (mem_type_bits & (1u << cur_index)))
+      return cur_index;
+
+   const VkPhysicalDeviceMemoryProperties *p = &physical_dev->memory_properties;
+   for (uint32_t i = 0; i < p->memoryTypeCount; i++) {
+      if (!(mem_type_bits & (1u << i)))
+         continue;
+
+      if ((p->memoryTypes[i].propertyFlags & preferred_flags) == preferred_flags)
+         return i;
+   }
+
+   return (uint32_t)(ffs(mem_type_bits) - 1);
+}
+
 #if defined(HAVE_LINUX_UDMABUF_H) && defined(HAVE_MEMFD_CREATE)
 
 static VkResult
@@ -320,7 +341,7 @@ vkr_shm_destroy(struct vkr_shm *shm)
 static VkResult
 vkr_shm_get_host_ptr_info_from_allocation_info(
    struct vkr_device *dev,
-   const VkMemoryAllocateInfo *alloc_info,
+   VkMemoryAllocateInfo *alloc_info,
    struct vkr_shm **out_shm,
    VkImportMemoryHostPointerInfoEXT *out_host_ptr_info)
 {
@@ -333,35 +354,31 @@ vkr_shm_get_host_ptr_info_from_allocation_info(
 
    /* Drivers tend to only report cached memory types for host pointer import, so
     * that they don't have to reason about the cache mode associated with the
-    * imported pages. Since none of the hw drivers assigns different VA space for
-    * coherent vs cached memory types, the import can be safely routed to the
-    * non-cached memory types as well:
-    * - for VM setup, coherency is maintained by the hypervisor, according to the
-    *   cache mode picked when setting up the nested pages
-    * - for vtest setup, it's at best effort since cache management is not wired
-    *   over the vtest protocol
-    *
-    * So the reported memory types are only checked for debugging purposes.
+    * imported pages. Remap to a supported memory type when the requested one is
+    * not reported in memoryTypeBits.
     */
-   if (VKR_DEBUG(HOST_PTR)) {
-      VkMemoryHostPointerPropertiesEXT host_props = {
-         .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT,
-      };
-      const VkResult result = dev->GetMemoryHostPointerPropertiesEXT(
-         dev->base.handle.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
-         shm->ptr, &host_props);
-      if (result != VK_SUCCESS) {
-         vkr_shm_destroy(shm);
-         return result;
-      }
-
-      vkr_physical_device_mem_type_spoof(physical_dev, &host_props.memoryTypeBits);
-      if (!(host_props.memoryTypeBits & (1u << alloc_info->memoryTypeIndex))) {
-         vkr_log("host memory import is unsupported for memory type %u "
-                 "(vk ret %d, memoryTypeBits 0x%x)",
-                 alloc_info->memoryTypeIndex, result, host_props.memoryTypeBits);
-      }
+   VkMemoryHostPointerPropertiesEXT host_props = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT,
+   };
+   const VkResult result = dev->GetMemoryHostPointerPropertiesEXT(
+      dev->base.handle.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+      shm->ptr, &host_props);
+   if (result != VK_SUCCESS) {
+      vkr_shm_destroy(shm);
+      return result;
    }
+
+   vkr_physical_device_mem_type_spoof(physical_dev, &host_props.memoryTypeBits);
+
+   if (VKR_DEBUG(HOST_PTR) &&
+       !(host_props.memoryTypeBits & (1u << alloc_info->memoryTypeIndex))) {
+      vkr_log("host ptr import: memoryTypeBits=0x%x, but index=%u",
+              host_props.memoryTypeBits, alloc_info->memoryTypeIndex);
+   }
+
+   alloc_info->memoryTypeIndex = vkr_select_mem_type_index(
+      physical_dev, host_props.memoryTypeBits, alloc_info->memoryTypeIndex,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
    *out_shm = shm;
    *out_host_ptr_info = (VkImportMemoryHostPointerInfoEXT){
