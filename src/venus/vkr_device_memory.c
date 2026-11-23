@@ -22,6 +22,19 @@
 #include "vkr_device_memory_gen.h"
 #include "vkr_physical_device.h"
 
+struct vkr_blob_mem_info {
+   VkImportMemoryFdInfoKHR fd;
+   void *gbm_bo;
+   int udmabuf_fd;
+
+   VkImportMemoryHostPointerInfoEXT host_ptr;
+   struct vkr_shm *shm;
+
+   VkExportMemoryAllocateInfo export;
+
+   uint32_t valid_fd_types;
+};
+
 static void
 vkr_sanitize_forced_import_info(VkMemoryAllocateInfo *alloc_info)
 {
@@ -339,11 +352,9 @@ vkr_shm_destroy(struct vkr_shm *shm)
 }
 
 static VkResult
-vkr_shm_get_host_ptr_info_from_allocation_info(
-   struct vkr_device *dev,
-   VkMemoryAllocateInfo *alloc_info,
-   struct vkr_shm **out_shm,
-   VkImportMemoryHostPointerInfoEXT *out_host_ptr_info)
+vkr_fix_alloc_info_with_host_ptr_import(struct vkr_device *dev,
+                                        VkMemoryAllocateInfo *alloc_info,
+                                        struct vkr_blob_mem_info *local_info)
 {
    const struct vkr_physical_device *physical_dev = dev->physical_device;
    const VkDeviceSize alignment =
@@ -380,29 +391,20 @@ vkr_shm_get_host_ptr_info_from_allocation_info(
       physical_dev, host_props.memoryTypeBits, alloc_info->memoryTypeIndex,
       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
-   *out_shm = shm;
-   *out_host_ptr_info = (VkImportMemoryHostPointerInfoEXT){
+   local_info->shm = shm;
+   local_info->host_ptr = (VkImportMemoryHostPointerInfoEXT){
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT,
       .pNext = alloc_info->pNext,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
       .pHostPointer = shm->ptr,
    };
+   alloc_info->pNext = &local_info->host_ptr;
+   alloc_info->allocationSize = local_info->shm->size;
+   vkr_sanitize_forced_import_info(alloc_info);
+   local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_SHM;
 
    return VK_SUCCESS;
 }
-
-struct vkr_blob_mem_info {
-   VkImportMemoryFdInfoKHR fd;
-   void *gbm_bo;
-   int udmabuf_fd;
-
-   VkImportMemoryHostPointerInfoEXT host_ptr;
-   struct vkr_shm *shm;
-
-   VkExportMemoryAllocateInfo export;
-
-   uint32_t valid_fd_types;
-};
 
 static bool
 vkr_fix_import_info(struct vkr_context *ctx,
@@ -511,18 +513,8 @@ vkr_fix_export_info(struct vkr_device *dev,
    }
 
 #ifdef __APPLE__
-   if (physical_dev->EXT_external_memory_host) {
-      const VkResult result = vkr_shm_get_host_ptr_info_from_allocation_info(
-         dev, alloc_info, &local_info->shm, &local_info->host_ptr);
-      if (result != VK_SUCCESS)
-         return result;
-
-      alloc_info->pNext = &local_info->host_ptr;
-      alloc_info->allocationSize = local_info->shm->size;
-      vkr_sanitize_forced_import_info(alloc_info);
-      local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_SHM;
-      return VK_SUCCESS;
-   }
+   if (physical_dev->EXT_external_memory_host)
+      return vkr_fix_alloc_info_with_host_ptr_import(dev, alloc_info, local_info);
 #endif
 
    return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -577,18 +569,8 @@ vkr_fix_mappable_info(struct vkr_device *dev,
       return VK_SUCCESS;
    }
 
-   if (use_host_ptr_import) {
-      const VkResult result = vkr_shm_get_host_ptr_info_from_allocation_info(
-         dev, alloc_info, &local_info->shm, &local_info->host_ptr);
-      if (result != VK_SUCCESS)
-         return result;
-
-      alloc_info->pNext = &local_info->host_ptr;
-      alloc_info->allocationSize = local_info->shm->size;
-      vkr_sanitize_forced_import_info(alloc_info);
-      local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_SHM;
-      return VK_SUCCESS;
-   }
+   if (use_host_ptr_import)
+      return vkr_fix_alloc_info_with_host_ptr_import(dev, alloc_info, local_info);
 
    if (support_export) {
       VkExternalMemoryHandleTypeFlagBits handle_type;
