@@ -178,11 +178,11 @@ vkr_gbm_bo_destroy(void *gbm_bo)
 }
 
 static VkResult
-vkr_gbm_get_fd_info_from_allocation_info(struct vkr_physical_device *physical_dev,
-                                         const VkMemoryAllocateInfo *alloc_info,
-                                         void **out_gbm_bo,
-                                         VkImportMemoryFdInfoKHR *out_fd_info)
+vkr_fix_alloc_info_with_gbm_import(struct vkr_device *dev,
+                                   VkMemoryAllocateInfo *alloc_info,
+                                   struct vkr_blob_mem_info *local_info)
 {
+   struct vkr_physical_device *physical_dev = dev->physical_device;
    const uint32_t flags =
       GBM_BO_USE_LINEAR | GBM_BO_USE_SW_READ_RARELY | GBM_BO_USE_SW_WRITE_RARELY;
    struct gbm_bo *gbm_bo;
@@ -224,13 +224,16 @@ vkr_gbm_get_fd_info_from_allocation_info(struct vkr_physical_device *physical_de
       return fd == -EMFILE ? VK_ERROR_TOO_MANY_OBJECTS : VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
-   *out_gbm_bo = (void *)gbm_bo;
-   *out_fd_info = (VkImportMemoryFdInfoKHR){
+   local_info->gbm_bo = (void *)gbm_bo;
+   local_info->fd = (VkImportMemoryFdInfoKHR){
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = alloc_info->pNext,
       .fd = fd,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
    };
+   alloc_info->pNext = &local_info->fd;
+   vkr_sanitize_forced_import_info(alloc_info);
+   local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
    return VK_SUCCESS;
 }
 
@@ -252,10 +255,9 @@ vkr_gbm_bo_destroy(ASSERTED void *gbm_bo)
 }
 
 static inline VkResult
-vkr_gbm_get_fd_info_from_allocation_info(UNUSED struct vkr_physical_device *physical_dev,
-                                         UNUSED const VkMemoryAllocateInfo *alloc_info,
-                                         UNUSED void **out_gbm_bo,
-                                         UNUSED VkImportMemoryFdInfoKHR *out_fd_info)
+vkr_fix_alloc_info_with_gbm_import(UNUSED struct vkr_device *dev,
+                                   UNUSED VkMemoryAllocateInfo *alloc_info,
+                                   UNUSED struct vkr_blob_mem_info *local_info)
 {
    vkr_log("minigbm_allocation is not enabled");
    return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -487,18 +489,8 @@ vkr_fix_export_info(struct vkr_device *dev,
    if (is_import || !export_info->handleTypes)
       return VK_SUCCESS;
 
-   if (physical_dev->gbm_device) {
-      assert(physical_dev->EXT_external_memory_dma_buf);
-      const VkResult result = vkr_gbm_get_fd_info_from_allocation_info(
-         physical_dev, alloc_info, &local_info->gbm_bo, &local_info->fd);
-      if (result != VK_SUCCESS)
-         return result;
-
-      alloc_info->pNext = &local_info->fd;
-      vkr_sanitize_forced_import_info(alloc_info);
-      local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
-      return VK_SUCCESS;
-   }
+   if (physical_dev->gbm_device)
+      return vkr_fix_alloc_info_with_gbm_import(dev, alloc_info, local_info);
 
    if ((export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT) &&
        physical_dev->is_dma_buf_fd_export_supported) {
@@ -557,17 +549,8 @@ vkr_fix_mappable_info(struct vkr_device *dev,
       return VK_SUCCESS;
    }
 
-   if (force_gbm_import) {
-      const VkResult result = vkr_gbm_get_fd_info_from_allocation_info(
-         physical_dev, alloc_info, &local_info->gbm_bo, &local_info->fd);
-      if (result != VK_SUCCESS)
-         return result;
-
-      alloc_info->pNext = &local_info->fd;
-      vkr_sanitize_forced_import_info(alloc_info);
-      local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
-      return VK_SUCCESS;
-   }
+   if (force_gbm_import)
+      return vkr_fix_alloc_info_with_gbm_import(dev, alloc_info, local_info);
 
    if (use_host_ptr_import)
       return vkr_fix_alloc_info_with_host_ptr_import(dev, alloc_info, local_info);
