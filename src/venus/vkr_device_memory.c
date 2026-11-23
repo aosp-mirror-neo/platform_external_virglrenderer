@@ -73,6 +73,28 @@ vkr_select_mem_type_index(const struct vkr_physical_device *physical_dev,
    return (uint32_t)(ffs(mem_type_bits) - 1);
 }
 
+static inline VkResult
+vkr_select_dma_buf_mem_type_index(struct vkr_device *dev,
+                                  int dmabuf_fd,
+                                  VkMemoryAllocateInfo *alloc_info)
+{
+   struct vn_device_proc_table *vk = &dev->proc_table;
+
+   VkMemoryFdPropertiesKHR fd_props = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+   };
+   const VkResult result = vk->GetMemoryFdPropertiesKHR(
+      dev->base.handle.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, dmabuf_fd,
+      &fd_props);
+   if (result != VK_SUCCESS)
+      return result;
+
+   vkr_physical_device_mem_type_spoof(dev->physical_device, &fd_props.memoryTypeBits);
+   alloc_info->memoryTypeIndex = vkr_select_mem_type_index(
+      dev->physical_device, fd_props.memoryTypeBits, alloc_info->memoryTypeIndex, 0);
+   return VK_SUCCESS;
+}
+
 #if defined(HAVE_LINUX_UDMABUF_H) && defined(HAVE_MEMFD_CREATE)
 
 static VkResult
@@ -122,6 +144,13 @@ vkr_fix_alloc_info_with_udmabuf_import(struct vkr_device *dev,
    }
 
    close(memfd);
+
+   const VkResult result = vkr_select_dma_buf_mem_type_index(dev, fd, alloc_info);
+   if (result != VK_SUCCESS) {
+      close(fd);
+      close(udmabuf_fd);
+      return result;
+   }
 
    local_info->udmabuf_fd = udmabuf_fd;
    local_info->fd = (VkImportMemoryFdInfoKHR){
@@ -223,6 +252,13 @@ vkr_fix_alloc_info_with_gbm_import(struct vkr_device *dev,
    if (fd < 0) {
       vkr_gbm_bo_destroy(gbm_bo);
       return fd == -EMFILE ? VK_ERROR_TOO_MANY_OBJECTS : VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   const VkResult result = vkr_select_dma_buf_mem_type_index(dev, fd, alloc_info);
+   if (result != VK_SUCCESS) {
+      close(fd);
+      vkr_gbm_bo_destroy(gbm_bo);
+      return result;
    }
 
    local_info->gbm_bo = (void *)gbm_bo;
