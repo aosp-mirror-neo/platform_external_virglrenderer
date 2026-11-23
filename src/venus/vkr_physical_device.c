@@ -19,6 +19,10 @@ static int udmabuf_dev_fd = -1;
 static void
 vkr_udmabuf_init_once(void)
 {
+   /* To be noted, there are 2 limits for udmabuf:
+    * - list_limit: udmabuf_create_list->count limit. Default is 1024.
+    * - size_limit_mb: Max size of a dmabuf, in megabytes. Default is 64.
+    */
    udmabuf_dev_fd = open("/dev/udmabuf", O_RDONLY | O_CLOEXEC);
    if (udmabuf_dev_fd < 0) {
       vkr_log("failed to open udmabuf device: %s", strerror(errno));

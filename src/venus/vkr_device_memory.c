@@ -76,11 +76,11 @@ vkr_select_mem_type_index(const struct vkr_physical_device *physical_dev,
 #if defined(HAVE_LINUX_UDMABUF_H) && defined(HAVE_MEMFD_CREATE)
 
 static VkResult
-vkr_udmabuf_get_fd_info_from_allocation_info(struct vkr_physical_device *physical_dev,
-                                             const VkMemoryAllocateInfo *alloc_info,
-                                             int *out_udmabuf_fd,
-                                             VkImportMemoryFdInfoKHR *out_fd_info)
+vkr_fix_alloc_info_with_udmabuf_import(struct vkr_device *dev,
+                                       VkMemoryAllocateInfo *alloc_info,
+                                       struct vkr_blob_mem_info *local_info)
 {
+   struct vkr_physical_device *physical_dev = dev->physical_device;
    int memfd = -1;
    int udmabuf_fd = -1;
    int fd = -1;
@@ -123,13 +123,16 @@ vkr_udmabuf_get_fd_info_from_allocation_info(struct vkr_physical_device *physica
 
    close(memfd);
 
-   *out_udmabuf_fd = udmabuf_fd;
-   *out_fd_info = (VkImportMemoryFdInfoKHR){
+   local_info->udmabuf_fd = udmabuf_fd;
+   local_info->fd = (VkImportMemoryFdInfoKHR){
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = alloc_info->pNext,
       .fd = fd,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
    };
+   alloc_info->pNext = &local_info->fd;
+   vkr_sanitize_forced_import_info(alloc_info);
+   local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
 
    return VK_SUCCESS;
 
@@ -144,11 +147,9 @@ fail:
 #else  /* HAVE_LINUX_UDMABUF_H && HAVE_MEMFD_CREATE */
 
 static inline VkResult
-vkr_udmabuf_get_fd_info_from_allocation_info(
-   UNUSED struct vkr_physical_device *physical_dev,
-   UNUSED const VkMemoryAllocateInfo *alloc_info,
-   UNUSED int *out_udmabuf_fd,
-   UNUSED VkImportMemoryFdInfoKHR *out_fd_info)
+vkr_fix_alloc_info_with_udmabuf_import(UNUSED struct vkr_device *dev,
+                                       UNUSED VkMemoryAllocateInfo *alloc_info,
+                                       UNUSED struct vkr_blob_mem_info *local_info)
 {
    vkr_log("udmabuf_allocation is not enabled");
    return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -533,21 +534,8 @@ vkr_fix_mappable_info(struct vkr_device *dev,
    const bool use_host_ptr_import =
       physical_dev->EXT_external_memory_host && (!support_export || VKR_DEBUG(HOST_PTR));
 
-   if (force_udmabuf_import) {
-      /* To be noted, there are 2 limits for udmabuf:
-       * - list_limit: udmabuf_create_list->count limit. Default is 1024.
-       * - size_limit_mb: Max size of a dmabuf, in megabytes. Default is 64.
-       */
-      const VkResult result = vkr_udmabuf_get_fd_info_from_allocation_info(
-         physical_dev, alloc_info, &local_info->udmabuf_fd, &local_info->fd);
-      if (result != VK_SUCCESS)
-         return result;
-
-      alloc_info->pNext = &local_info->fd;
-      vkr_sanitize_forced_import_info(alloc_info);
-      local_info->valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
-      return VK_SUCCESS;
-   }
+   if (force_udmabuf_import)
+      return vkr_fix_alloc_info_with_udmabuf_import(dev, alloc_info, local_info);
 
    if (force_gbm_import)
       return vkr_fix_alloc_info_with_gbm_import(dev, alloc_info, local_info);
